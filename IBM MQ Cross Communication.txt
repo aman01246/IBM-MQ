@@ -1,0 +1,99 @@
+IBM MQ Cross-Queue-Manager Communication
+-----------------------------------------
+
+step 1 :create queue 
+
+-------------
+QM1
+----
+docker run -d --name QM1 ^
+  -p 1414:1414 ^
+  -p 9443:9443 ^
+  -e LICENSE=accept ^
+  -e MQ_QMGR_NAME=QM1 ^
+  icr.io/ibm-messaging/mq:latest
+
+QM2
+-----
+docker run -d --name QM2 ^
+  -p 1415:1414 ^
+  -p 9444:9443 ^
+  -e LICENSE=accept ^
+  -e MQ_QMGR_NAME=QM2 ^
+  icr.io/ibm-messaging/mq:latest
+
+-----------------------------------------------------
+
+
+Step 2 — Establish a connection between QM1 and QM2
+----------------------------------------------------
+The connection requires four main components:
+1. A destination local queue on QM2.
+2. A transmission queue on QM1.
+3. A remote queue definition on QM1.
+4. A sender/receiver channel pair.
+
+	---------------------------------
+			QM1
+	Remote queue → Transmission queue
+			|
+	Sender channel ⇄ Receiver channel
+	TCP connection · Host port 1415 on QM2
+			|
+			QM2
+	Destination local queue
+	-----------------------------------
+
+Step 2.1 — Create the destination queue on QM2
+First, open QM2 from Windows CMD:
+ -> docker exec -it QM2 bash
+
+
+Start MQSC:
+ -> runmqsc QM2
+
+
+Create the local queue:
+ -> DEFINE QLOCAL('QM2.ORDER.QUEUE')
+
+
+Verify it:
+ -> DISPLAY QLOCAL('QM2.ORDER.QUEUE')
+
+## Step 2.2 — Create the transmission queue on QM1
+ 
+	->docker exec -it QM1 bash
+	->runmqsc QM1
+	->DEFINE QLOCAL('QM1.TO.QM2') USAGE(XMITQ)
+
+
+👍 ## Step 2.3 — Create the remote queue on QM1
+	
+	->DEFINE QREMOTE('QM2.ORDER.REMOTE') +
+       RNAME('QM2.ORDER.QUEUE') +
+       RQMNAME('QM2') +
+       XMITQ('QM1.TO.QM2')
+
+	Verify the remote queue
+	->DISPLAY QREMOTE('QM2.ORDER.REMOTE') ALL
+
+  Check that the output includes:
+	->QUEUE(QM2.ORDER.REMOTE)
+	->RNAME(QM2.ORDER.QUEUE)
+	->RQMNAME(QM2)
+	->XMITQ(QM1.TO.QM2)
+
+
+## Step 2.4 — Create the sender channel on QM1
+Create the sender channel
+Run this command:
+ -> DEFINE CHANNEL('QM2.TO.QM1') CHLTYPE(SDR) +
+       TRPTYPE(TCP) +
+       CONNAME('host.docker.internal(1415)') +
+       XMITQ('QM1.TO.QM2')
+
+
+
+
+
+
